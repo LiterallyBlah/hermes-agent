@@ -133,9 +133,38 @@ def test_registered_tools_refresh_persistent_kernel_and_redact(tmp_path):
             sid = created['result']['session_id']
             for name in scripts:
                 value = 'opaque-credential-for-' + name
-                submitted = await rpc(ws, 'prompt.submit', session_id=sid, input_id=name, text=name, finite=True,
-                                      external_run={'seconds': 60, 'env': {'JOB_API_KEY': value, 'JOB_RUN_ID': name}})
-                assert 'result' in submitted, submitted
+                # A terminal receipt/kernel exit can precede the ownership monitor's
+                # final release. Only retry its documented busy refusal, without
+                # committing a second admission while the first is being reaped.
+                previous_count = len(_rows(home))
+
+                def attempt():
+                    return asyncio.create_task(rpc(ws, 'prompt.submit', session_id=sid,
+                        input_id=name, text=name, finite=True,
+                        external_run={'seconds': 60, 'env': {'JOB_API_KEY': value, 'JOB_RUN_ID': name}}))
+
+                pending = attempt()
+
+                def accepted():
+                    nonlocal pending
+                    if not pending.done():
+                        return False
+                    response = pending.result()
+                    if 'error' not in response:
+                        return response
+                    assert previous_count and response['error']['message'] == 'session_busy', response
+                    assert len(_rows(home)) == previous_count
+                    pending = attempt()
+                    return False
+
+                try:
+                    submitted = await async_wait_until(accepted, timeout=15,
+                        what='previous owned admission fully released')
+                finally:
+                    if not pending.done():
+                        pending.cancel()
+                        await asyncio.gather(pending, return_exceptions=True)
+                assert isinstance(submitted, dict) and 'result' in submitted, submitted
                 await async_wait_until(lambda: all(r['status'] == 'terminal' for r in _rows(home)), timeout=60)
                 assert _rows(home)[-1]['outcome'] == 'completed', _rows(home)
                 assert proof.exists(), {'requests': peer.requests, 'gateway': (home / 'restart.log').read_text()}

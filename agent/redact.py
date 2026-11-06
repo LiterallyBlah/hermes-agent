@@ -1021,8 +1021,6 @@ def redact_sensitive_text(text: str, *, force: bool = False, code_file: bool = F
         return text
     # Vault secrets are a hard model-egress boundary: scrubbed regardless of the redact_secrets preference.
     text = redact_registered_vault_values(text)
-    from agent.run_environment import redact_run_values
-    text = redact_run_values(text)
     if not (force or _redact_enabled()):
         return text
     # ``secret_file`` is authoritative: a caller that classified the source as secret-bearing must not

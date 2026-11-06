@@ -388,12 +388,8 @@ class BaseEnvironment(ABC):
         """Profile-scoped names that must not persist in the snapshot. Monotonic for the
         environment lifetime: an allowlist can be cleared after a value was captured, and
         retaining the exclusion keeps that old value from leaking to a later profile."""
-        from agent.run_environment import run_values
-        # External grants are transient even in single-profile gateways. Keep
-        # names after revocation so a reused snapshot cannot resurrect a grant.
-        self._snapshot_passthrough_names.update(run_values())
         if not self._profile_scoped_passthrough:
-            return tuple(sorted(self._snapshot_passthrough_names))
+            return ()
         try:
             from agent.secret_scope import is_multiplex_active
             if is_multiplex_active():

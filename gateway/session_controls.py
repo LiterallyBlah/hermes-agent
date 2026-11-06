@@ -751,9 +751,6 @@ class AuthorityConnection:
         return {**replay, 'open_requests': open_requests(stream, ref.session_id)}
 
     async def submit(self, ref, params):
-        if 'external_run' in params:
-            from gateway.session_external_run import submit
-            return asdict(await submit(self, ref, params))
         if self._voice_stop_replay(ref, params) or await self._typed_voice_stop(ref, params):
             self._record_voice_stop(ref, params)
             return {'voice_stopped': True}
@@ -938,8 +935,6 @@ class AuthorityConnection:
             params["prompt_id"], {"answer": params["answer"]}, kind="clarify")
 
     async def close(self):
-        from gateway.session_external_run import disconnect
-        disconnect(self)
         for sibling in self._siblings.values():
             await sibling.close()
         self._siblings.clear()

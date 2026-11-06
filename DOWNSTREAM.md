@@ -39,25 +39,9 @@ No scheduled merges, unattended deployment, publication upstream, new infrastruc
 
 ## Integration ledger
 
-The generic bounded external-run capability is implemented by `171d79e10952ecffb1fbc1a823b762b555f852e8`. It is an execution capability, not Paperclip-specific behaviour in Hermes core.
+The external-run gateway changes introduced by `171d79e10952ecffb1fbc1a823b762b555f852e8` and its cleanup-test follow-up have been retired by owner request. The Paperclip integration is being moved to an adapter-owned Python-library process around the existing Hermes APIs; its credentials, supervision and cancellation belong at that integration boundary, not in the shared gateway.
 
-- Receiving profiles opt in with `gateway.external_run_max_seconds` (default `0`, disabled) and exact names in `terminal.run_env_passthrough`.
-- Controllers use `chat -q --owned-run-seconds SECONDS` and repeat `--run-env NAME`; values come from their private environment, never command arguments. The existing authenticated local `prompt.submit` protocol carries the temporary map.
-- Each admission has a revocable environment and an isolated persistent code kernel. Shell snapshots exclude its names; completion and late settlement/publication keep redaction without keeping tool access. Disconnect/deadline cancellation remains admission/generation-fenced.
-- Behaviour regressions are `tests/tools/test_run_environment.py`, `tests/gateway/test_external_run.py` and `tests/gateway/test_external_run_process.py`. They cover registered tools, single-profile snapshot reuse, decoded settlement persistence, actual CLI dispatch/termination, socket loss, physical worker cleanup and unchanged ordinary detach. See `website/docs/developer-guide/gateway-classic-cli.md` for configuration and limits.
-
-Keep these invariants when merging upstream or replacing the implementation:
-
-Required contract:
-
-- An explicitly opted-in external run can supply named temporary integration environment values, including credential-shaped values, through the existing authenticated local gateway protocol into only that run's tool scope.
-- Values remain transient, bounded and in memory. They must not enter argv, model prompts, saved histories/DB, session snapshots, config values, ordinary logs or files. Keep the ordinary public client-environment filter unchanged.
-- Isolate profiles and sessions, refresh safely for a later run reusing a conversation, refuse unsafe replacement during an active run, and clear the overlay after completion/cancellation. Do not inherit the launching client's entire environment.
-- Existing terminal and code-execution paths can use the selected overlay without exposing it to unrelated sessions. Permanent owner credentials are not a replacement for per-run identity.
-- Ordinary interactive/one-shot clients retain their established detach semantics. An explicitly bounded externally owned run must be interrupted through the gateway's native generation-fenced cancellation when its controller ends; killing a client process alone is not verified cancellation.
-- Tests cover the real gateway/executor boundary, isolation, reuse/cleanup, non-persistence/redaction and cancellation. A captured CLI invocation or passing model hello does not prove this contract.
-
-Retire the downstream implementation only when an upstream release satisfies those behaviours and the matching controller/adapter still passes its real-run tests. Delete obsolete code rather than leaving two implementations active. Preserve behaviour-contract tests while adapting them to the upstream interface.
+The maintained executable source is restored to the vendor baseline above. This retirement does not remove unrelated local runtime fixes, profiles, credentials, memory or session history. The abandoned capability remains in Git history for reference, not as an active dependency. Do not reintroduce it merely to support the former CLI/SSH adapter.
 
 ## State and other local work
 

@@ -69,12 +69,6 @@ def _may_run_unattended(connection, ref):
 
 
 async def execute_finite_admission(authority, ref, row):
-    from gateway.session_external_run import execution_scope
-    async with execution_scope(authority, ref, row):
-        return await _execute_finite_admission(authority, ref, row)
-
-
-async def _execute_finite_admission(authority, ref, row):
     from gateway.session_ingress import execute_admission
     from gateway.session_display import display_turn_scope, submission_turn_scope
     from gateway.session_surface import surface_turn_scope

@@ -206,11 +206,6 @@ class CanonicalModelOverride(Params):
     reasoning: str | None = None
 
 
-class CanonicalExternalRun(Params):
-    seconds: int
-    env: dict[str, str]
-
-
 class CanonicalSubmitParams(CanonicalSessionParams):
     text: str
     submission_id: str | None = None
@@ -237,7 +232,6 @@ class CanonicalSubmitParams(CanonicalSessionParams):
     # The submitter answers the clarify tool's whole batch in one ``clarify`` server request (main's
     # batch panel); without it the turn's viewers get one ``clarify.request`` card per question.
     clarify_batch: bool = False
-    external_run: CanonicalExternalRun | None = None
 
 
 class CanonicalVoiceStopped(Result):

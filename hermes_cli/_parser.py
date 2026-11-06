@@ -234,10 +234,6 @@ def _build_chat_parser(subparsers) -> argparse.ArgumentParser:
         "Query to run. On a real TTY the prompt seeds an interactive "
         "session (submitted literally as the first turn); combined with "
         "--oneshot or -Q, or on a non-TTY, it answers and exits."))
-    chat_parser.add_argument("--owned-run-seconds", type=int, default=None,
-                             help="Cancel this finite run on client disconnect or deadline (profile opt-in required)")
-    chat_parser.add_argument("--run-env", action="append", default=[], metavar="NAME",
-                             help="Forward one profile-allowed environment name to this owned run's tools only")
     _query_group.add_argument("--query-file", metavar="PATH", help=(
         "Read the single query from a file instead of the command line "
         "('-' reads stdin). Safe for arbitrary text: nothing is shell-"

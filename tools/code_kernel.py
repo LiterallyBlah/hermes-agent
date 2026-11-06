@@ -398,9 +398,7 @@ def _resolve_owner(task_id: str) -> str:
             owner = f"{owner}{_CHILD_OWNER_QUALIFIER}{child_id}"
     except Exception:
         pass
-    from agent.run_environment import current_run_environment
-    run = current_run_environment()
-    return owner + '::run::' + run.identity if run is not None else owner
+    return owner
 
 
 def shutdown_all_kernels() -> None:

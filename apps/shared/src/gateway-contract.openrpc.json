@@ -8805,6 +8805,28 @@
         "title": "CanonicalEventsResult",
         "type": "object"
       },
+      "CanonicalExternalRun": {
+        "additionalProperties": false,
+        "properties": {
+          "seconds": {
+            "title": "Seconds",
+            "type": "integer"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Env",
+            "type": "object"
+          }
+        },
+        "required": [
+          "seconds",
+          "env"
+        ],
+        "title": "CanonicalExternalRun",
+        "type": "object"
+      },
       "CanonicalListParams": {
         "additionalProperties": false,
         "properties": {
@@ -11230,6 +11252,17 @@
             "default": false,
             "title": "Clarify Batch",
             "type": "boolean"
+          },
+          "external_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalExternalRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [

@@ -85,6 +85,42 @@ without `-Q` ends with main's `Resume this session with: hermes --resume <id>` b
 `--compact` is not a `hermes chat` option (argparse rejects it); a direct `cli.main`
 hand-off refuses it and names `display.compact`.
 
+## Explicitly owned finite runs
+
+An external controller can opt a finite `chat -q` run into cancellation on controller
+loss and a bounded, memory-only tool environment. Ordinary detach behaviour is unchanged.
+The receiving profile must opt in; the default cap is `0` (disabled):
+
+```yaml
+gateway:
+  external_run_max_seconds: 900
+terminal:
+  run_env_passthrough: [JOB_API_KEY, JOB_API_URL, JOB_RUN_ID]
+```
+
+```sh
+hermes chat -q 'Process the assigned job' --owned-run-seconds 900 \
+  --run-env JOB_API_KEY --run-env JOB_API_URL --run-env JOB_RUN_ID
+```
+
+Supply the values through the controller's private process environment, never as
+command arguments or prompt text. `--run-env` selects exact names, not prefixes;
+missing names are omitted. The authenticated local `prompt.submit` request carries
+`external_run: {seconds, env}`. The server checks its own profile cap and allowlist,
+refuses active-run replacement, and never stores the values in the admission payload.
+The opt-in CLI uses the transport client rather than dropping these options at the
+classic CLI hand-off. It requires a finite run and local terminal backend; config-bypass
+and safe-mode worker launches are refused rather than silently losing the environment.
+
+Each admitted run gets a revocable tool scope and its own persistent Python kernel.
+Shell snapshots exclude its names even in single-profile gateways. Completion,
+controller disconnection and deadline expiry revoke tool access; late output and
+settlement retain redaction-only context. A later run can reuse the conversation
+with fresh values but cannot inherit the previous kernel namespace or grant.
+Controller loss interrupts only the matching native admission/generation and reaps
+its tool processes. Consumers should verify the terminal receipt and physical
+cleanup, not equate the launcher's exit with a finished gateway turn.
+
 ## Current parity limits — not full classic CLI parity
 
 Full legacy presentation, slash registry parity, interactive

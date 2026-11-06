@@ -39,7 +39,14 @@ No scheduled merges, unattended deployment, publication upstream, new infrastruc
 
 ## Integration ledger
 
-The bounded external-run integration is developed on `paperclip-run-scope` and merged here only after verification. Keep the implementation commits and exact acceptance evidence recorded when it lands. This is a generic execution capability, not Paperclip-specific behaviour in Hermes core.
+The generic bounded external-run capability is implemented by `171d79e10952ecffb1fbc1a823b762b555f852e8`. It is an execution capability, not Paperclip-specific behaviour in Hermes core.
+
+- Receiving profiles opt in with `gateway.external_run_max_seconds` (default `0`, disabled) and exact names in `terminal.run_env_passthrough`.
+- Controllers use `chat -q --owned-run-seconds SECONDS` and repeat `--run-env NAME`; values come from their private environment, never command arguments. The existing authenticated local `prompt.submit` protocol carries the temporary map.
+- Each admission has a revocable environment and an isolated persistent code kernel. Shell snapshots exclude its names; completion and late settlement/publication keep redaction without keeping tool access. Disconnect/deadline cancellation remains admission/generation-fenced.
+- Behaviour regressions are `tests/tools/test_run_environment.py`, `tests/gateway/test_external_run.py` and `tests/gateway/test_external_run_process.py`. They cover registered tools, single-profile snapshot reuse, decoded settlement persistence, actual CLI dispatch/termination, socket loss, physical worker cleanup and unchanged ordinary detach. See `website/docs/developer-guide/gateway-classic-cli.md` for configuration and limits.
+
+Keep these invariants when merging upstream or replacing the implementation:
 
 Required contract:
 

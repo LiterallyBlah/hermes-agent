@@ -102,7 +102,8 @@ def completion_payload(row, settled, response, captured):
     if isinstance(captured_result.get('persisted_turn'), dict):
         complete['persisted_turn'] = {**captured_result['persisted_turn'],
                                       'submission_id': row['request_id']}
-    return complete
+    from agent.run_environment import redact_run_payload
+    return redact_run_payload(complete)
 
 
 def _publish_completion(authority, live, ref, row, settled, response, captured):
@@ -233,3 +234,33 @@ def publish_terminal(authority, ref, row, settled, response, captured):
     _release_media(authority, row)
     # Idle follows the completion so a viewer cannot mistake a settled turn for a lost frame.
     authority._publish_pending(ref)
+
+
+async def recover_and_publish(authority, ref, live, row):
+    """Recover an uncertain settlement without growing the owner's drain scope."""
+    from hermes_state_runtime import RuntimeStoreError, get_session_admission
+    admission_id = row['admission_id']
+    try:
+        await recover_failed_settlement(authority, row)
+    except RuntimeStoreError:
+        authority._pause(ref, 'unknown_execution')
+        return None
+    current = get_session_admission(authority.db, admission_id=admission_id)
+    if current['status'] == 'unknown':
+        from gateway.session_ingress import retain_unsettled_delivery
+        retain_unsettled_delivery(authority, admission_id)
+        authority._publish_pending(ref)
+        authority._pause(ref, 'unknown_execution')
+        return None
+    from gateway.session_results import admission_result
+    with live.event_stream.lock:
+        captured = admission_result(authority.db, admission_id)
+        authority.pending_results.pop(admission_id, None)
+        if captured is None:
+            waiter = authority.waiters.pop(admission_id, None)
+            if waiter is not None and not waiter.done():
+                waiter.set_exception(RuntimeStoreError('unknown_execution'))
+            return None, ''
+        response = captured['result'].get('final_response') or ''
+        publish_terminal(authority, ref, row, current, response, captured)
+    return current, response

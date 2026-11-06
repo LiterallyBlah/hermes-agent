@@ -313,8 +313,8 @@ DEFAULT_CONFIG = {
         # Env vars passed into sandboxed terminal/execute_code (plus skill-declared required_environment_variables).
         "env_passthrough": [],
         "client_env_passthrough": [],  # Extra non-secret toolchain names a CLI/TUI client sends for its tools
-        # Remote-backend sync-back refuses to extract a downloaded state archive larger than this
-        # (bytes); raise it for a ~/.hermes tree that legitimately exceeds 2 GiB.
+        "run_env_passthrough": [],  # Exact names accepted only in transient externally owned tool runs
+        # Remote sync-back extraction cap (bytes); raise for state trees larger than 2 GiB.
         "sync_back_max_bytes": 2 * 1024 * 1024 * 1024,
         # HOME for host tool subprocesses: "auto" = host keeps the real OS-user HOME, containers use
         # HERMES_HOME/home; "real" = force real HOME; "profile" = force HERMES_HOME/home when it
@@ -2095,9 +2095,9 @@ DEFAULT_CONFIG = {
         "unmanaged_idle_exit_seconds": 600,  # client-auto-started gateway only; 0 disables
         # Seconds a SIGTERM-interrupted agent unwinds before teardown (short: service stop budgets).
         "signal_interrupt_grace_timeout": 1,
+        "external_run_max_seconds": 0,  # 0 disables externally owned CLI runs; opt in with a cap <= 86400
         "service_install_choice": None,  # null | install | decline; never authorizes ordinary launch installation.
-        # Durable delivery-obligation ledger: final responses are recorded in state.db around the
-        # platform send; a gateway that died between finalize and platform ACK redelivers on next
+        # Durable final-response ledger: redeliver after a crash between finalize and ACK.
         # boot (ambiguous cases carry a "recovered reply — may be a duplicate" marker;
         # at-least-once). Disable to lose in-flight final responses on crash/restart.
         "delivery_ledger": True,

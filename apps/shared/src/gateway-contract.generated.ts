@@ -5202,6 +5202,7 @@ export interface CanonicalSubmitParams {
   api_text?: string | null
   model_override?: CanonicalModelOverride | null
   clarify_batch?: boolean
+  external_run?: CanonicalExternalRun | null
 }
 export interface CanonicalAttachment {
   path: string
@@ -5217,6 +5218,10 @@ export interface CanonicalModelOverride {
   model: string
   provider?: string | null
   reasoning?: string | null
+}
+export interface CanonicalExternalRun {
+  seconds: number
+  env: Record<string, string>
 }
 /** ``prompt.submit``: the admission receipt, or ``{voice_stopped: true}``. */
 export type CanonicalSubmitResult = AdmissionStatus | CanonicalVoiceStopped

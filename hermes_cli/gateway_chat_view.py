@@ -106,6 +106,7 @@ class GatewayChatView:
         self.resume_footer = False  # `chat -q` without -Q: main's "Resume this session with:" block
         self.launch_api_key = None  # `--api-key` of this terminal's launch; never durable (/new reuses it)
         self.finite_admission = None
+        self.external_run = None
         self._finite_events = []
         self.streams = {}
         self.completions = {}
@@ -346,6 +347,7 @@ class GatewayChatView:
         receipt = await self.client.rpc("prompt.submit", session_id=self.session_id,
                                         input_id=uuid.uuid4().hex, text=text,
                                         **({"finite": True} if self.finite else {}),
+                                        **({"external_run": self.external_run} if self.external_run is not None else {}),
                                         **({"unattended": True} if self.finite and self.unattended else {}))
         if (receipt or {}).get("voice_stopped") is True:
             # TUI-26: a bare stop phrase typed into this LOCAL session's voice chat (another viewer

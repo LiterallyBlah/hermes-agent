@@ -129,14 +129,16 @@ def is_env_passthrough(var_name: str) -> bool:
     Hermes-managed credential NOW. Ownership changes after acceptance (a platform plugin
     registered later declares the name in its ``required_env`` or manifest), so the refusal applied at registration
     is re-applied here, where every child builder consumes the allowlist."""
-    return ((var_name in _get_allowed() or var_name in _load_config_passthrough())
+    from agent.run_environment import run_values
+    return ((var_name in run_values() or var_name in _get_allowed() or var_name in _load_config_passthrough())
             and not _is_hermes_provider_credential(var_name))
 
 
 def get_all_passthrough() -> frozenset[str]:
     """Return the union of skill-registered and config-based passthrough vars, minus names
     that have become Hermes-managed credentials since they were accepted."""
-    return frozenset(name for name in frozenset(_get_allowed()) | _load_config_passthrough()
+    from agent.run_environment import run_values
+    return frozenset(name for name in frozenset(run_values()) | frozenset(_get_allowed()) | _load_config_passthrough()
                      if not _is_hermes_provider_credential(name))
 
 
@@ -149,6 +151,10 @@ def resolve_passthrough_value(name: str, fallback: str | None = None) -> str | N
     scope keeps overlay semantics and an unscoped caller keeps its fallback."""
     from agent.secret_scope import (
         _is_global_env, current_secret_scope, get_secret, is_multiplex_active)
+    from agent.run_environment import run_values
+    values = run_values()
+    if name in values:
+        return values[name]
     # Global terminal/runtime settings are not profile secrets; ``fallback`` is
     # already the caller's effective value (incl. an explicit per-call override).
     if _is_global_env(name) and fallback is not None:
@@ -168,13 +174,15 @@ def scoped_passthrough_additions(present: Iterable[str]) -> dict[str, str]:
     bound scope alone: never ``os.environ``, never another profile. Empty without a scope, so
     single-profile spawns are byte-identical."""
     from agent.secret_scope import _is_global_env, current_secret_scope
+    from agent.run_environment import run_values
     scope = current_secret_scope()
+    additions = run_values()
     if not scope:
-        return {}
+        return {k: v for k, v in additions.items() if k not in present and is_env_passthrough(k)}
     present = set(present)
-    additions: dict[str, str] = {}
+    additions = {k: v for k, v in additions.items() if k not in present and is_env_passthrough(k)}
     for name in get_all_passthrough():
-        if name in present or _is_global_env(name):
+        if name in present or name in additions or _is_global_env(name):
             continue
         value = scope.get(name)
         if value is not None:

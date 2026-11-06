@@ -1,7 +1,6 @@
 # Hermes Agent - Development Guide
 
-**Maintained downstream:** read [DOWNSTREAM.md](DOWNSTREAM.md) before updating or deploying this
-fork. Merge upstream into the maintained branch; do not replace it with a stock release.
+Read [DOWNSTREAM.md](DOWNSTREAM.md) first.
 
 For AI coding assistants and developers working on hermes-agent. This root file is a hub: what
 applies everywhere, then a routing table. Each area's `AGENTS.md` loads automatically when you work

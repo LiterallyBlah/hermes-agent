@@ -169,6 +169,8 @@ async def run_gateway_chat(args, emitter=None):
     # Finite: answer one prompt and exit (-z, --oneshot, -Q, stream-json, or -q off a TTY).
     oneshot = bool(oneshot_prompt or getattr(args, "oneshot_exit", False) or quiet or
                    (query and not (sys.stdin.isatty() and sys.stdout.isatty())))
+    from hermes_cli.gateway_owned_run import launch_run_environment
+    external_run = launch_run_environment(args, finite=oneshot)
     async with connect_gateway() as client:
         description = await client.rpc("runtime.describe")
         title = continue_title(args)
@@ -233,6 +235,7 @@ async def run_gateway_chat(args, emitter=None):
         view = GatewayChatView(client, snapshot, quiet=quiet, emitter=emitter,
                                usage_file=getattr(args, "usage_file", None))
         view.launch_api_key = getattr(args, "api_key", None)  # /new keeps this launch's key
+        view.external_run = external_run
         view.unattended = isinstance(oneshot_prompt, str)
         view.resume_footer = oneshot and not quiet
         if (getattr(args, "resume", None) or title or latest) and not quiet:

@@ -106,7 +106,8 @@ def finish_result(db, *, epoch, row, response, outcome, result=None, prepared=No
     settled = settle_session_input(db, epoch=epoch, admission_id=row['admission_id'],
         generation=row['generation'], outcome=outcome, result=stored, _transfers=transfers,
         _terminal_write=write)
-    return settled, response
+    from agent.run_environment import redact_run_values
+    return settled, redact_run_values(response) if isinstance(response, str) else response
 
 
 def admission_result(db, admission_id):

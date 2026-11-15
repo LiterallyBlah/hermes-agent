@@ -1021,8 +1021,11 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
             from agent.notification_presentation import notification_turn
             from gateway.session_results import execution_result
             captured = execution_result.get()
-            before = (getattr(agent, 'session_prompt_tokens', 0) or 0,
-                      getattr(agent, 'session_completion_tokens', 0) or 0)
+            # session_prompt_tokens already counts cache read/write, so input_tokens stays the
+            # whole prompt; the cache deltas ride alongside for consumers that split them out.
+            usage_counters = ('session_prompt_tokens', 'session_completion_tokens',
+                              'session_cache_read_tokens', 'session_cache_write_tokens')
+            before = [getattr(agent, name, 0) or 0 for name in usage_counters]
             with notification_turn(agent, muted=ctx.mute_notification_reply, session_id=ctx.session_id or ""):
                 from gateway.response_filters import silence_allowed
                 # Where a bare marker would become the "needed a reply" warning, the agent ends a
@@ -1034,10 +1037,11 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
                 finally:
                     agent._silence_marker_needs_reply = False
             if captured is not None:
-                incoming = max(0, (getattr(agent, 'session_prompt_tokens', 0) or 0) - before[0])
-                outgoing = max(0, (getattr(agent, 'session_completion_tokens', 0) or 0) - before[1])
+                incoming, outgoing, cache_read, cache_write = (
+                    max(0, (getattr(agent, name, 0) or 0) - start) for name, start in zip(usage_counters, before))
                 captured['usage'] = {'input_tokens': incoming, 'output_tokens': outgoing,
-                                     'total_tokens': incoming + outgoing}
+                                     'total_tokens': incoming + outgoing,
+                                     'cache_read_tokens': cache_read, 'cache_write_tokens': cache_write}
                 _settle_api_runtime_lock(agent, result, captured)
             return result
         finally:

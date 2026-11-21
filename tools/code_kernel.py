@@ -454,7 +454,7 @@ def shutdown_kernels_for_delegated_child(child_session_id: str) -> None:
 # restores cross-turn persistence (kernels then live until the session boundary or the idle reaper).
 
 class _RunScope:
-    __slots__ = ("owners", "closed")
+    __slots__ = ("closed", "owners")
 
     def __init__(self) -> None:
         self.owners: set[str] = set()

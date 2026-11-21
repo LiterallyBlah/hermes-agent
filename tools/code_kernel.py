@@ -454,10 +454,11 @@ def shutdown_kernels_for_delegated_child(child_session_id: str) -> None:
 # restores cross-turn persistence (kernels then live until the session boundary or the idle reaper).
 
 class _RunScope:
-    __slots__ = ("owners",)
+    __slots__ = ("owners", "closed")
 
     def __init__(self) -> None:
         self.owners: set[str] = set()
+        self.closed = False  # a tool thread outliving its run must not re-register on it
 
 
 _RUN_SCOPE: ContextVar[Optional[_RunScope]] = ContextVar("hermes_kernel_run_scope", default=None)
@@ -477,7 +478,7 @@ def note_run_kernel_owner(owner: str) -> None:
     if scope is None or not owner or owner in scope.owners or not _run_scoped_lifetime():
         return
     with _LIVE_RUNS_LOCK:
-        if owner not in scope.owners:
+        if not scope.closed and owner not in scope.owners:
             scope.owners.add(owner)
             _LIVE_RUNS[owner] = _LIVE_RUNS.get(owner, 0) + 1
 
@@ -488,6 +489,10 @@ def live_run_count(owner: str) -> int:
 
 
 def _end_run_scope(scope: _RunScope) -> None:
+    with _LIVE_RUNS_LOCK:
+        scope.closed = True
+        if not scope.owners:  # the run never used execute_code
+            return
     from tools import code_kernel_remote
     with _LIVE_RUNS_LOCK:
         finished = []

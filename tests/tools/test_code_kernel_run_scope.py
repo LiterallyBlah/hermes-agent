@@ -176,3 +176,15 @@ def test_run_conversation_disposes_the_runs_kernels_on_every_exit(tmp_path, outc
     assert _KERNELS == {}
     assert _free_for_another_process(lock_file)
     assert code_kernel.live_run_count("conv-turn") == 0
+
+
+def test_a_tool_thread_outliving_its_run_does_not_pin_the_owner():
+    with _config(), _session("conv-late"):
+        with run_scope() as scope:
+            pass
+        code_kernel._RUN_SCOPE.set(scope)  # a straggler thread still carrying the ended run's context
+        try:
+            _cell("q = 1")
+        finally:
+            code_kernel._RUN_SCOPE.set(None)
+    assert code_kernel.live_run_count("conv-late") == 0

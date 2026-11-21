@@ -340,8 +340,9 @@ def execute_in_remote_kernel(
     """Run one cell in the owner's remote kernel. Returns the raw cell result dict (caller
     post-processes output), or ``None`` when no kernel could be spawned (caller falls open to
     per-call). ``state_lost``/``state_reset``/``reused`` ride in the ``kernel`` sub-dict."""
-    from tools.code_kernel import _resolve_owner
+    from tools.code_kernel import _resolve_owner, note_run_kernel_owner
     owner = _resolve_owner(task_env_id)
+    note_run_kernel_owner(owner)
     kernel, reused, state_reset, state_lost = _acquire_remote_kernel(
         env, env_type, owner, task_env_id, sandbox_tools, reset=reset, idle_exit=idle_exit)
     if kernel is None:

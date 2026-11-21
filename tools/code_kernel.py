@@ -32,6 +32,8 @@ import tempfile
 import threading
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -333,11 +335,18 @@ class KernelRegistry:
     def shutdown(self, owner: Optional[str] = None, *, owner_matches: Optional[Callable[[str], bool]] = None) -> None:
         """Tear down every kernel, every kernel one owner (key[0]) holds, or every kernel whose owner
         satisfies ``owner_matches``."""
+        self.teardown_all(self.pop_owned(owner, owner_matches=owner_matches))
+
+    def pop_owned(self, owner: Optional[str] = None, *,
+                  owner_matches: Optional[Callable[[str], bool]] = None) -> list[Any]:
+        """Pop (without tearing down) the kernels ``shutdown`` would dispose."""
         with self.lock:
-            doomed = [self.kernels.pop(key) for key in list(self.kernels)
-                      if (owner is None and owner_matches is None) or key[0] == owner
-                      or (owner_matches is not None and owner_matches(key[0]))]
-        for kernel in doomed:
+            return [self.kernels.pop(key) for key in list(self.kernels)
+                    if (owner is None and owner_matches is None) or key[0] == owner
+                    or (owner_matches is not None and owner_matches(key[0]))]
+
+    def teardown_all(self, kernels: list[Any]) -> None:
+        for kernel in kernels:
             self._teardown(kernel)
 
     def discard(self, key: tuple, kernel: Any) -> None:
@@ -434,6 +443,90 @@ def shutdown_kernels_for_delegated_child(child_session_id: str) -> None:
     _REGISTRY.shutdown(owner_matches=matcher)
     from tools.code_kernel_remote import shutdown_remote_kernels_where
     shutdown_remote_kernels_where(matcher)
+
+
+# ── Run-scoped lifetime ──────────────────────────────────────────────────────────────────────
+# A kernel used during an agent run (one ``run_conversation`` turn) is disposed when that run ends —
+# completed, failed, interrupted or cancelled — so the process exits and releases everything it held
+# (open files, ``flock`` mutexes, sockets) instead of idling until ``kernel_idle_timeout``. Within a
+# run the kernel persists as before. Runs are counted per owner: a kernel is never disposed while
+# another live run of the same owner has used it. ``code_execution.kernel_lifetime: session``
+# restores cross-turn persistence (kernels then live until the session boundary or the idle reaper).
+
+class _RunScope:
+    __slots__ = ("closed", "owners")
+
+    def __init__(self) -> None:
+        self.owners: set[str] = set()
+        self.closed = False  # a tool thread outliving its run must not re-register on it
+
+
+_RUN_SCOPE: ContextVar[Optional[_RunScope]] = ContextVar("hermes_kernel_run_scope", default=None)
+_LIVE_RUNS: dict[str, int] = {}
+_LIVE_RUNS_LOCK = threading.Lock()  # taken before either registry's lock, never after
+
+
+def _run_scoped_lifetime() -> bool:
+    from tools.code_execution_tool import _load_config
+    return str(_load_config().get("kernel_lifetime", "run") or "run").strip().lower() != "session"
+
+
+def note_run_kernel_owner(owner: str) -> None:
+    """Record that the current run uses *owner*'s kernels (called before every kernel acquire).
+    Outside a run scope (direct tool use, embeds, tests) this is a no-op: lifetime is unchanged."""
+    scope = _RUN_SCOPE.get()
+    if scope is None or not owner or owner in scope.owners or not _run_scoped_lifetime():
+        return
+    with _LIVE_RUNS_LOCK:
+        if not scope.closed and owner not in scope.owners:
+            scope.owners.add(owner)
+            _LIVE_RUNS[owner] = _LIVE_RUNS.get(owner, 0) + 1
+
+
+def live_run_count(owner: str) -> int:
+    with _LIVE_RUNS_LOCK:
+        return _LIVE_RUNS.get(owner, 0)
+
+
+def _end_run_scope(scope: _RunScope) -> None:
+    with _LIVE_RUNS_LOCK:
+        scope.closed = True
+        if not scope.owners:  # the run never used execute_code
+            return
+    from tools import code_kernel_remote
+    with _LIVE_RUNS_LOCK:
+        finished = []
+        for owner in scope.owners:
+            remaining = _LIVE_RUNS.get(owner, 0) - 1
+            if remaining > 0:
+                _LIVE_RUNS[owner] = remaining
+            else:
+                _LIVE_RUNS.pop(owner, None)
+                finished.append(owner)
+        scope.owners.clear()
+        # Popped while the run lock is held, so a run that registers next always gets a fresh kernel.
+        local = [k for owner in finished for k in _REGISTRY.pop_owned(owner)]
+        remote = [k for owner in finished for k in code_kernel_remote._REGISTRY.pop_owned(owner)]
+    for owner in finished:
+        logger.debug("run ended: disposing execute_code kernels of owner %s", owner)
+    _REGISTRY.teardown_all(local)
+    code_kernel_remote._REGISTRY.teardown_all(remote)
+
+
+@contextmanager
+def run_scope():
+    """Bound execute_code kernel lifetime to one agent run (``agent.conversation_loop`` wraps each
+    turn). Disposal runs on every exit path, including exceptions and interrupts."""
+    scope = _RunScope()
+    token = _RUN_SCOPE.set(scope)
+    try:
+        yield scope
+    finally:
+        _RUN_SCOPE.reset(token)
+        try:
+            _end_run_scope(scope)
+        except Exception:
+            logger.warning("run-end kernel disposal failed", exc_info=True)
 
 
 atexit.register(shutdown_all_kernels)
@@ -809,8 +902,11 @@ def execute_in_session_kernel(
     sandbox_tools: frozenset, timeout: int, max_tool_calls: int, reset: bool, is_interrupted,
 ) -> str:
     """Run one cell in the (owner, mode, python, cwd, tools) session kernel. The owner is the
-    session key (``_resolve_owner``), not the per-turn task id, so state survives across turns."""
-    key = (_resolve_owner(task_id) or "", mode, child_python, child_cwd, tuple(sorted(sandbox_tools)))
+    session key (``_resolve_owner``), not the per-turn task id; inside an agent run the kernel is
+    disposed when the run ends (``run_scope``) unless ``kernel_lifetime: session`` keeps it."""
+    owner = _resolve_owner(task_id) or ""
+    note_run_kernel_owner(owner)
+    key = (owner, mode, child_python, child_cwd, tuple(sorted(sandbox_tools)))
     exec_start = time.monotonic()
     from agent.delegation_context import is_delegated_child_context
     kernel, state_reset = _acquire_kernel(key, reset, pinned=is_delegated_child_context())

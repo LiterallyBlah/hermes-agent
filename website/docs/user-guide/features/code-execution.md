@@ -187,10 +187,11 @@ code_execution:
 
 ## State Between Calls (the session kernel)
 
-On the local terminal backend, `execute_code` does not start a fresh interpreter for every call. Each session owns a persistent Python kernel, so variables, imports, and loaded data from one call are available in the next. The agent can load a dataset once and query it across several turns instead of re-reading it every time. Subagents get their own kernel; kernels are never shared across sessions. A subagent's kernel lives exactly as long as the subagent: it is exempt from the live-kernel cap while the subagent runs (a wide fan-out no longer evicts a sibling's kernel mid-task) and is disposed when the subagent finishes.
+On the local terminal backend, `execute_code` does not start a fresh interpreter for every call. Each session owns a persistent Python kernel, so variables, imports, and loaded data from one call are available in the next. The agent can load a dataset once and query it across several calls in the same run instead of re-reading it every time. Subagents get their own kernel; kernels are never shared across sessions. A subagent's kernel lives exactly as long as the subagent: it is exempt from the live-kernel cap while the subagent runs (a wide fan-out no longer evicts a sibling's kernel mid-task) and is disposed when the subagent finishes.
 
 What ends a kernel:
 
+- **End of the run.** By default (`code_execution.kernel_lifetime: run`) a kernel used by an agent run (one turn) is disposed when that run ends, whether it completed, failed or was interrupted. The kernel process exits, so it releases everything it held: open files, `flock` locks, sockets. A kernel is not disposed while another live run of the same session still uses it. Set `kernel_lifetime: session` to keep state across turns instead.
 - **Timeout or interrupt.** A cell that hits the timeout (or is interrupted) kills the kernel process and its state is lost on purpose; the result says so and the next call starts a fresh kernel.
 - **`reset=true`.** The agent can pass `reset: true` to discard the kernel's state and start clean. This is also the way to pick up environment changes: a kernel's environment is frozen when it spawns, so a newly allowlisted passthrough variable is invisible until the kernel is reset.
 - **Idle timeout and eviction.** Kernels die with the session, after `code_execution.kernel_idle_timeout` idle seconds (default 1800), or when more than `code_execution.max_session_kernels` (default 4) top-level sessions' kernels are alive and the oldest is evicted (running subagents' kernels do not count against the cap).
@@ -202,6 +203,7 @@ The security envelope is the same as a one-shot script: environment scrubbing, t
 code_execution:
   kernel_idle_timeout: 1800   # seconds a kernel may sit idle before it is reaped
   max_session_kernels: 4      # kernels kept alive at once; oldest is evicted past this
+  kernel_lifetime: run        # run: dispose at the end of each run; session: keep across turns
 ```
 
 **Remote backends** (Docker, SSH, Modal) run a remote session kernel with the same contract. If the kernel cannot be spawned on the backend, Hermes falls back to running each call as a standalone script and says so in the result.

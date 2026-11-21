@@ -1960,13 +1960,13 @@ DEFAULT_CONFIG = {
         # Session kernels are always on locally (`kernel_mode` is ignored) and remotely
         # (tools/code_kernel_remote.py; a backend that cannot spawn a kernel fails open to
         # per-call). One kernel per (session owner, mode, interpreter, cwd, tool-set) keeps state
-        # across calls and turns; subagents get their own. Kernels die with the session, after
-        # kernel_idle_timeout idle seconds, or by LRU eviction past max_session_kernels. A
-        # timed-out/interrupted cell kills the kernel; env is frozen at spawn (reset=true after
-        # changing passthrough). Tool RPC authority (approval, session, allow-list, call budget) is
-        # rebound per cell — that runtime boundary is the cross-cell enforcement.
+        # across calls; subagents get their own. kernel_lifetime run = disposed when the agent run
+        # (turn) ends, releasing its files/locks; session = kept across turns until the session ends,
+        # kernel_idle_timeout or LRU past max_session_kernels. A timed-out cell kills the kernel; env
+        # is frozen at spawn (reset=true after changing passthrough); tool RPC authority is per cell.
         "kernel_idle_timeout": 1800,
         "max_session_kernels": 4,
+        "kernel_lifetime": "run",
     },
     # Tool Search replaces deferred tools in the model-facing array with the
     # tool_search / tool_describe / tool_call bridges and surfaces them on demand.

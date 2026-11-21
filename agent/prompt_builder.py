@@ -22,9 +22,9 @@ from hermes_constants import (
 from agent.model_metadata import CHARS_PER_TOKEN
 from agent.runtime_cwd import resolve_agent_cwd
 from agent.skill_utils import (
-    EXCLUDED_SKILL_DIRS, SKILL_SUPPORT_DIRS,
+    EXCLUDED_SKILL_DIRS, SKILL_SUPPORT_DIRS, SKILLS_INDEX_PREAMBLE_DEFAULT, SKILLS_INDEX_PREAMBLE_ON_DEMAND,
     TIER_LOCAL, clip_skill_description, extract_skill_conditions, extract_skill_description,
-    get_disabled_skill_names, get_skill_search_roots,
+    get_disabled_skill_names, get_skill_search_roots, get_skills_index_preamble_mode,
     iter_skill_index_files, parse_frontmatter, skill_matches_apps, skill_matches_environment,
     skill_matches_platform, skill_matches_platform_list,
 )
@@ -1292,9 +1292,24 @@ def _label_visible_entries(visible_entries: list[dict], skills_by_category: dict
         skills_by_category.setdefault(category, []).append((entry["load_name"], desc))
 
 
+# skills.index_preamble: on_demand — for profiles whose own instructions already cover routine work, the
+# default "MUST load / err on the side of loading" wording forces a skill_view per wake that only re-reads
+# what is in context. Default (mandatory) output stays byte-identical.
+_ON_DEMAND_SKILLS_GUIDANCE = (
+    "## Skills\n"
+    "The skills below are available. Load a skill with skill_view(name) only when the instructions already "
+    "in your context do not cover the action you are about to take. Load each skill at most once per run; "
+    "never reload a skill you already loaded in this run — use the copy in context. If no skill is needed "
+    "for the action, proceed without loading one.\n"
+    "If a skill has issues, fix it with skill_manage(action='patch').\n"
+    "\n"
+)
+
+
 def _render_skills_index(
     skills_by_category: dict[str, list[tuple[str, str]]],
     compact_categories: frozenset[str] | None, available_tools: set[str] | None, unloadable: list[str] = (),
+    preamble_mode: str = SKILLS_INDEX_PREAMBLE_DEFAULT,
 ) -> str:
     """Render the ## Skills block; "" when there is nothing to list. *unloadable* names (different skills
     sharing a name AND relative path within one tier — one root or several) get a rename note instead of a row skill_view would refuse."""
@@ -1336,6 +1351,12 @@ def _render_skills_index(
             + "\n<available_skills>\n" + "\n".join(index_lines) + "\n</available_skills>"
             + hidden_note
         )
+    if preamble_mode == SKILLS_INDEX_PREAMBLE_ON_DEMAND:
+        return (
+            _ON_DEMAND_SKILLS_GUIDANCE
+            + "<available_skills>\n" + "\n".join(index_lines) + "\n</available_skills>"
+            + hidden_note
+        )
     return (
         "## Skills\n"
         "Before replying, scan the skills below. If a skill matches or is even partially relevant to your "
@@ -1374,6 +1395,7 @@ def _build_skills_system_prompt_inner(
     # Plugin-registered skills (ctx.register_skill) are registry state, not files under any scanned
     # root — the snapshot manifest can't see them change, so they participate in the cache key.
     plugin_rows = _plugin_skill_prompt_rows(disabled, available_tools, available_toolsets, _platform_hint or None)
+    preamble_mode = get_skills_index_preamble_mode()
     # Skill files are part of the key: another process (a hub install in a second terminal, the curator
     # inside the gateway, a git pull of an external dir) never clears this process's LRU, so a key of
     # config alone served the pre-change index to every running session until restart (#92313).
@@ -1385,7 +1407,7 @@ def _build_skills_system_prompt_inner(
         tuple(sorted(str(t) for t in (available_tools or set()))),
         tuple(sorted(str(ts) for ts in (available_toolsets or set()))),
         _platform_hint, tuple(sorted(disabled)), tuple(sorted(compact_categories or ())),
-        _oneshot_prompt_variant(), tuple(plugin_rows),
+        _oneshot_prompt_variant(), tuple(plugin_rows), preamble_mode,
     )
     snapshot = _load_skills_snapshot(skills_dir, manifest)
     app_gated = snapshot is not None and any(
@@ -1450,7 +1472,7 @@ def _build_skills_system_prompt_inner(
             logger.debug("Could not write skills prompt snapshot: %s", e)
 
     unloadable = sorted({e["name"] for e in visible_entries if not e["load_name"]})
-    result = _render_skills_index(skills_by_category, compact_categories, available_tools, unloadable)
+    result = _render_skills_index(skills_by_category, compact_categories, available_tools, unloadable, preamble_mode)
     with _SKILLS_PROMPT_CACHE_LOCK:
         _SKILLS_PROMPT_CACHE[cache_key] = result
         _SKILLS_PROMPT_CACHE.move_to_end(cache_key)

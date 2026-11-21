@@ -262,6 +262,17 @@ def _skills_cfg_get(key: str) -> Any:
     return skills_cfg.get(key) if skills_cfg is not None else None
 
 
+SKILLS_INDEX_PREAMBLE_DEFAULT = "mandatory"
+SKILLS_INDEX_PREAMBLE_ON_DEMAND = "on_demand"
+
+
+def get_skills_index_preamble_mode() -> str:
+    """``skills.index_preamble`` for the active profile; any value but ``on_demand`` means the default."""
+    value = _skills_cfg_get("index_preamble")
+    mode = value.strip().lower() if isinstance(value, str) else ""
+    return SKILLS_INDEX_PREAMBLE_ON_DEMAND if mode == SKILLS_INDEX_PREAMBLE_ON_DEMAND else SKILLS_INDEX_PREAMBLE_DEFAULT
+
+
 def _expand_path(entry: str) -> Path:
     """Expand ``~`` and ``${VAR}`` in a config path entry."""
     return Path(os.path.expanduser(os.path.expandvars(entry)))

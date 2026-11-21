@@ -1826,13 +1826,16 @@ def run_conversation(
     from agent.turn_context import export_current_turn_boundary
     from agent.turn_finalizer import settle_held_final
     from agent.voice_turn_route import end_voice_turn_route
+    from tools.code_kernel import run_scope
     from tools.vision_tools_history_budget import native_turn_images
 
     # Steer / redirect / interrupt set this mid-turn; the result reports whether the turn ran untouched.
     agent._turn_user_intervened = False
     # Images attached natively to this user turn stay visible to vision_analyze for the turn, so
     # it does not embed the same pixels a second time into the same request (#76411).
-    with native_turn_images(user_message):
+    # execute_code kernels used by this run are disposed when it ends, on every exit path, so a
+    # finished run never leaves an interpreter (and the files/locks it holds) behind.
+    with run_scope(), native_turn_images(user_message):
         try:
             result = _run_conversation_turn(
                 agent,
